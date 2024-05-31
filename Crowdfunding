@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Crowdfunding {
+    struct Campaign {
+        address payable creator;
+        uint goal;
+        uint deadline;
+        uint fundsRaised;
+        bool goalReached;
+    }
+
+    uint public campaignCount;
+    mapping(uint => Campaign) public campaigns;
+
+    event CampaignCreated(uint campaignId, address creator, uint goal, uint deadline);
+    event ContributionMade(uint campaignId, address contributor, uint amount);
+    event CampaignFunded(uint campaignId, uint totalFunds);
+
+    function createCampaign(uint _goal, uint _deadline) public {
+        require(_goal > 0, "Goal must be greater than zero");
+        require(_deadline > block.timestamp, "Deadline must be in the future");
+
+        campaigns[campaignCount] = Campaign({
+            creator: payable(msg.sender),
+            goal: _goal,
+            deadline: _deadline,
+            fundsRaised: 0,
+            goalReached: false
+        });
+
+        emit CampaignCreated(campaignCount, msg.sender, _goal, _deadline);
+        campaignCount++;
+    }
+
+    function contribute(uint _campaignId) public payable {
+        Campaign storage campaign = campaigns[_campaignId];
+
+        require(_campaignId < campaignCount, "Campaign does not exist");
+        require(block.timestamp < campaign.deadline, "Campaign has ended");
+        require(msg.value > 0, "Contribution must be greater than zero");
+
+        campaign.fundsRaised += msg.value;
+        emit ContributionMade(_campaignId, msg.sender, msg.value);
+
+        if (campaign.fundsRaised >= campaign.goal) {
+            campaign.goalReached = true;
+            emit CampaignFunded(_campaignId, campaign.fundsRaised);
+        }
+    }
+
+    function withdrawFunds(uint _campaignId) public {
+        Campaign storage campaign = campaigns[_campaignId];
+
+        require(_campaignId < campaignCount, "Campaign does not exist");
+        require(msg.sender == campaign.creator, "Only the campaign creator can withdraw funds");
+        require(block.timestamp >= campaign.deadline, "Campaign is still ongoing");
+
+        if (!campaign.goalReached) {
+            revert("Campaign goal was not reached");
+        }
+
+        uint amount = campaign.fundsRaised;
+        campaign.fundsRaised = 0;
+        campaign.creator.transfer(amount);
+    }
+
+    function assertCampaignExists(uint _campaignId) public view {
+        assert(_campaignId < campaignCount);  // Ensure the campaign exists
+    }
+}
